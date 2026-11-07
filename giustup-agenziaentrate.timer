@@ -1,0 +1,10 @@
+[Unit]
+Description=Ogni notte alle 02:40: la prassi dell'Agenzia delle Entrate
+
+[Timer]
+OnCalendar=*-*-* 02:40:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

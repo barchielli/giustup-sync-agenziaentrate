@@ -1,0 +1,16 @@
+[Unit]
+Description=Sync notturno della prassi dell'Agenzia delle Entrate (circolari, risoluzioni, provvedimenti, interpelli)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/giustup-sync-agenziaentrate
+# Il lucchetto: se il giro dello storico sta lavorando, questo non parte (e non e' un errore).
+ExecStart=/usr/bin/flock -n /run/lock/giustup-agenziaentrate.lock /usr/bin/python3 /opt/giustup-sync-agenziaentrate/agenziaentrate.py --massimo 900
+Nice=10
+# Un giro che ha lasciato indietro qualche documento non e' un guasto del
+# servizio: lo dice lo stato su S3, e il codice 1 non deve far apparire
+# l'attivita' come fallita a ogni notte.
+SuccessExitStatus=0 1
+IOSchedulingClass=idle
