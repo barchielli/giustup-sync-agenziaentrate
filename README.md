@@ -48,7 +48,7 @@ nello stato, si riprende la notte dopo); `2` il portale non rispondeva più.
 |---|---|
 | Nome e fonte | prassi Agenzia delle Entrate, da `agenziaentrate.gov.it` |
 | Autenticazione | nessuna (portale pubblico) |
-| Cadenza | ogni notte alle 02:40, timer systemd `giustup-agenziaentrate.timer` |
+| Cadenza | ogni notte alle 05:20 UTC, timer systemd `giustup-agenziaentrate.timer` |
 | Tetto per giro | 900 atti (`--massimo`); al tetto il giro si ferma pulito |
 | Pausa | 0,5 s fra le pagine, 1,0 s fra i PDF, 2 s ogni 20 atti |
 | Identificativo | UUIDv5 dell'indirizzo del PDF (`chiave_fonte`) |
