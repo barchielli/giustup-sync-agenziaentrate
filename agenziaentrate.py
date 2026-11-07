@@ -97,7 +97,11 @@ PAUSA_LUNGA = 2.0
 TENTATIVI = 5
 RIPROVABILI = (425, 429, 500, 502, 503, 504)
 
-PAROLE_ERRORE = ("404", "page not found", "pagina non trovata")
+# Attenzione: NON mettere la cifra "404" fra le parole d'errore. Gli indirizzi
+# dei documenti dell'Agenzia (le UDA li portano nel percorso) contengono "404"
+# in modo legittimo, e il documento inesistente si riconosce dal PDF che non
+# arriva (non comincia con %PDF) o dal corpo HTML della pagina d'errore.
+PAROLE_ERRORE = ("page not found", "pagina non trovata", "errore 404")
 
 RIGHE_PER_LOTTO = 25
 FALLIMENTI_DI_FILA = 25
