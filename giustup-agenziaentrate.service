@@ -1,5 +1,5 @@
 [Unit]
-Description=Sync notturno della prassi dell'Agenzia delle Entrate (circolari, risoluzioni, provvedimenti, interpelli)
+Description=Agenzia Entrate: indicizza in OpenSearch i record che il runner di Milano ha caricato su S3 (non scarica dalla fonte)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/opt/giustup-sync-agenziaentrate
 # Il lucchetto: se il giro dello storico sta lavorando, questo non parte (e non e' un errore).
-ExecStart=/usr/bin/flock -n /run/lock/giustup-agenziaentrate.lock /usr/bin/python3 /opt/giustup-sync-agenziaentrate/agenziaentrate.py --massimo 900
+ExecStart=/usr/bin/flock -n /run/lock/giustup-agenziaentrate.lock /usr/bin/python3 /opt/giustup-sync-agenziaentrate/agenziaentrate.py --indicizza-da-s3
 Nice=10
 # Un giro che ha lasciato indietro qualche documento non e' un guasto del
 # servizio: lo dice lo stato su S3, e il codice 1 non deve far apparire

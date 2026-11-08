@@ -1,8 +1,8 @@
 [Unit]
-Description=Ogni notte alle 05:20: la prassi dell'Agenzia delle Entrate
+Description=Ogni notte alle 06:15: indicizza i record Agenzia Entrate caricati da Milano su S3
 
 [Timer]
-OnCalendar=*-*-* 05:20:00
+OnCalendar=*-*-* 06:15:00
 RandomizedDelaySec=300
 Persistent=true
 
