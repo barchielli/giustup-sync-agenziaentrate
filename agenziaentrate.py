@@ -75,10 +75,16 @@ BASE = "https://www.agenziaentrate.gov.it"
 PORTALE = BASE + "/portale"
 
 OS_BASE = os.environ.get("GIUSTUP_OPENSEARCH", "https://localhost:9200")
-IDX = "giustup-agenziaentrate"
+IDX = os.environ.get("GIUSTUP_INDICE", "giustup-agenziaentrate")
 BUCKET = os.environ.get("GIUSTUP_BUCKET", "giustup-archivio-sentenze-593859982945")
 PREFISSO_PDF = "contentstore/agenziaentrate"
 CHIAVE_STATO = "stato-sync/agenziaentrate.json"
+PREFISSO_REC = os.environ.get("GIUSTUP_PREFISSO_REC", "contentstore/agenziaentrate/_rec")
+
+# Scissione Milano/motore: quando è vero, il giro (da IP italiano, runner di
+# Milano) salva su S3 anche il record JSON del documento, oltre al PDF, così il
+# motore lo indicizza in OpenSearch senza rifare la fetch dalla fonte.
+_salva_record = False
 
 CERT = "/etc/opensearch/kirk.pem"
 CHIAVE_CERT = "/etc/opensearch/kirk-key.pem"
@@ -358,6 +364,22 @@ def carica(cliente, chiave, corpo, tipo):
     cliente.put_object(Bucket=BUCKET, Key=chiave, Body=corpo, ContentType=tipo)
 
 
+def salva_record(cliente, documento):
+    """In scissione (Milano) il documento va su S3 anche come record JSON,
+    così il motore lo indicizza senza rifare la fetch dalla fonte."""
+    if not _salva_record or not documento:
+        return
+    anno = documento.get("anno") or 0
+    chiave = "%s/%s/%s.json" % (PREFISSO_REC, anno, documento.get("id_nodo"))
+    try:
+        cliente.put_object(
+            Bucket=BUCKET, Key=chiave,
+            Body=json.dumps(documento, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json")
+    except Exception as e:
+        log("record %s non salvato su S3: %r" % (chiave, e))
+
+
 def stato(riassunto):
     scritto = json.dumps(riassunto, ensure_ascii=False, indent=2)
     try:
@@ -440,6 +462,7 @@ def lavora(pdf_url, titolo, oggetto, categoria, voce_categoria, scrivi,
 
     if scrivi:
         carica(cliente_s3, documento["chiave_s3"], corpo, "application/pdf")
+        salva_record(cliente_s3, documento)
     if documento["testo_scarso"]:
         log("    %s: testo estratto %d caratteri (PDF forse scansionato)"
             % (documento["titolo"][:70], len(testo)))
@@ -595,6 +618,8 @@ def richiesta(url, timeout=90, tentativi=TENTATIVI):
 
 def sincronizza(args):
     prova = max(0, int(args.prova or 0))
+    global _salva_record
+    _salva_record = not prova and not args.senza_s3 and bool(getattr(args, "salva_record", False))
     scrivi = not prova and not args.senza_s3
     indice = not prova and not args.senza_indice
     cliente_s3 = s3() if scrivi else None
@@ -824,6 +849,70 @@ def stampa_famiglie():
     return 0
 
 
+def indicizza_da_s3(args):
+    """Il lato motore della scissione: legge da S3 i record lasciati dal giro di
+    Milano (`--salva-record`) e li indica in OpenSearch. Non tocca la fonte:
+    carica solo quello che l'archivio non ha ancora (confronto su `chiave_fonte`)."""
+    crea_indice_se_manca()
+    cliente = s3()
+    chiavi = []
+    paginatore = cliente.get_paginator("list_objects_v2")
+    try:
+        for pagina in paginatore.paginate(Bucket=BUCKET, Prefix=PREFISSO_REC + "/"):
+            for o in pagina.get("Contents", []):
+                if o["Key"].endswith(".json"):
+                    chiavi.append(o["Key"])
+    except Exception as e:
+        log("elenco record su S3 non leggibile: %r" % (e,))
+        return 2
+
+    documenti = []
+    for k in chiavi:
+        try:
+            corpo = cliente.get_object(Bucket=BUCKET, Key=k)["Body"].read()
+            documenti.append(json.loads(corpo.decode("utf-8")))
+        except Exception as e:
+            log("record %s non letto: %r" % (k, e))
+
+    fonti = [d.get("chiave_fonte") for d in documenti if d.get("chiave_fonte")]
+    gia = set()
+    if fonti:
+        try:
+            gia = conosciuti(fonti)
+        except Exception as e:
+            log("indice non interrogabile (%s): si ricaricano tutti" % (e,))
+    nuovi = [d for d in documenti if d.get("chiave_fonte") not in gia]
+    log("record su S3: %d, gia' in indice: %d, da indicizzare: %d"
+        % (len(documenti), len(documenti) - len(nuovi), len(nuovi)))
+
+    inizio = time.time()
+    falliti = 0
+    for i in range(0, len(nuovi), 25):
+        lotto = nuovi[i:i + 25]
+        try:
+            indicizza(lotto)
+        except Exception as e:
+            falliti += len(lotto)
+            log("indicizzazione di %d documenti: %s" % (len(lotto), e))
+
+    riassunto = {
+        "ultimoGiro": adesso().isoformat().replace("+00:00", "Z"),
+        "esito": 1 if falliti else 0,
+        "durataSecondi": int(time.time() - inizio),
+        "documentiSuS3": len(documenti),
+        "documentiIndicizzati": len(nuovi) - falliti,
+        "documentiFalliti": falliti,
+        "indice": IDX,
+        "versionePipeline": "agenziaentrate-1.0",
+    }
+    stato(riassunto)
+    metrica("EsitoIndicizzaAgenziaEntrate", riassunto["esito"])
+    log("indicizza-da-s3: %d su %d, %d falliti, %d s"
+        % (riassunto["documentiIndicizzati"], riassunto["documentiSuS3"],
+           falliti, riassunto["durataSecondi"]))
+    return riassunto["esito"]
+
+
 def main():
     a = argparse.ArgumentParser(description="Sync della prassi Agenzia delle Entrate per Giustup")
     a.add_argument("--prova", type=int, default=0,
@@ -840,9 +929,16 @@ def main():
                    help="non tocca OpenSearch")
     a.add_argument("--senza-s3", action="store_true",
                    help="non carica su S3")
+    a.add_argument("--salva-record", action="store_true",
+                   help="(scissione Milano) salva anche il record JSON su S3 per il motore")
+    a.add_argument("--indicizza-da-s3", action="store_true",
+                   help="(scissione motore) indicizza in OpenSearch i record lasciati su S3 da Milano")
     a.add_argument("--famiglie", action="store_true",
                    help="stampa le famiglie ed esce")
     args = a.parse_args()
+
+    if args.indicizza_da_s3:
+        return indicizza_da_s3(args)
 
     if args.famiglie:
         return stampa_famiglie()
