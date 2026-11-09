@@ -616,6 +616,35 @@ def richiesta(url, timeout=90, tentativi=TENTATIVI):
 
 # ------------------------------------------------------------- il giro
 
+
+
+def conosciuti_da_s3(cliente, chiavi):
+    """Dedup senza OpenSearch, per il giro sul runner di Milano: elenca
+    l'archivio PDF (PREFISSO_PDF) e dice quali chiavi_fonte sono gia'
+    archiviate. L'archivio contiene TUTTO lo storico, quindi la dedup e'
+    completa; i record _rec contengono solo cio' che ha scaricato il runner."""
+    if not chiavi or cliente is None:
+        return set()
+    per_id = {}
+    for cf in chiavi:
+        per_id[str(uuid.uuid5(NOMESPACE, "giustup:agenziaentrate:" + cf))] = cf
+    trovati = set()
+    try:
+        paginatore = cliente.get_paginator("list_objects_v2")
+        for pagina in paginatore.paginate(Bucket=BUCKET, Prefix=PREFISSO_PDF + "/"):
+            for o in pagina.get("Contents", []):
+                k = o["Key"]
+                if not k.endswith(".pdf"):
+                    continue
+                stem = k.rsplit("/", 1)[-1][:-4]
+                cf = per_id.pop(stem, None)
+                if cf is not None:
+                    trovati.add(cf)
+    except Exception as e:
+        log("dedup da S3 non disponibile (%s): si riscarica tutto" % (e,))
+    return trovati
+
+
 def sincronizza(args):
     prova = max(0, int(args.prova or 0))
     global _salva_record
@@ -708,9 +737,9 @@ def sincronizza(args):
                           [valuta_blocco(b, famiglia_slug)]
                           if azione == "atto" and pdf]
             gia = set()
-            if indice and not args.tutto and pdf_pagina:
+            if not args.tutto and pdf_pagina:
                 try:
-                    gia = conosciuti(pdf_pagina)
+                    gia = conosciuti(pdf_pagina) if indice else conosciuti_da_s3(cliente_s3, pdf_pagina)
                 except Exception as e:
                     log("indice non interrogabile (%s): si riscarica tutto" % (e,))
 
