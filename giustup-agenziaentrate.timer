@@ -1,10 +1,9 @@
-[Unit]
-Description=Settimanale, sabato 06:15 UTC: indicizza i record Agenzia Entrate caricati da Milano su S3
+﻿[Unit]
+Description=Settimanale, sabato 06:15 UTC: i record dell'Agenzia delle Entrate caricati da Milano
 
 [Timer]
 OnCalendar=Sat *-*-* 06:15:00
-RandomizedDelaySec=300
-Persistent=true
+Persistent=false
 
 [Install]
 WantedBy=timers.target
