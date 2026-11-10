@@ -1,4 +1,4 @@
-﻿[Unit]
+[Unit]
 Description=Sync la prassi dell Agenzia delle Entrate dal runner Milano - solo fetch + S3 + record (niente OpenSearch)
 After=network-online.target
 Wants=network-online.target
