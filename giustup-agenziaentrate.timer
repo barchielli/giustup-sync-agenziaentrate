@@ -1,8 +1,8 @@
 [Unit]
-Description=Ogni notte alle 06:15: indicizza i record Agenzia Entrate caricati da Milano su S3
+Description=Settimanale, sabato 06:15 UTC: indicizza i record Agenzia Entrate caricati da Milano su S3
 
 [Timer]
-OnCalendar=*-*-* 06:15:00
+OnCalendar=Sat *-*-* 06:15:00
 RandomizedDelaySec=300
 Persistent=true
 
