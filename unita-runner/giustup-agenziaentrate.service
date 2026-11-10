@@ -1,0 +1,12 @@
+﻿[Unit]
+Description=Sync la prassi dell Agenzia delle Entrate dal runner Milano - solo fetch + S3 + record (niente OpenSearch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/giustup-sync-agenziaentrate
+ExecStart=/usr/bin/flock -n /run/lock/giustup-agenziaentrate.lock /usr/bin/python3 /opt/giustup-sync-agenziaentrate/agenziaentrate.py --senza-indice --salva-record
+SuccessExitStatus=0 1 2
+Nice=10
+IOSchedulingClass=idle

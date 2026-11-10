@@ -1,0 +1,10 @@
+﻿[Unit]
+Description=Settimanale, sabato 05:45 UTC: la prassi dell Agenzia delle Entrate (dal runner Milano)
+
+[Timer]
+OnCalendar=Sat *-*-* 05:45:00
+RandomizedDelaySec=300
+Persistent=false
+
+[Install]
+WantedBy=timers.target
